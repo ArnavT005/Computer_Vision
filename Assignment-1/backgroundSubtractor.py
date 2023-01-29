@@ -1,44 +1,58 @@
-import numpy as np
 import cv2
+import numpy as np
 
 class BackgroundSubtractor:
-    # Initializes background subtractor module (Mixture of Gaussians)
-    #   K:            int: number of gaussians in the mixture
-    #   alpha:      float: learning rate
-    #   T:          float: cumulative threshold for filtering background distributions
-    #   num_rows:     int: number of rows in image
-    #   num_cols:     int: number of columns in image
-    #   num_channels: int: number of channels in image
-    def __init__(self, K, alpha, T, initial_data):
+    def __init__(self, K, alpha, T, m_data, p_data):
+        """Initializes background subtractor module (Mixture of Gaussians).
+        
+        Function parameters:\\
+        K:       int: number of gaussians in the mixture\\
+        alpha: float: learning rate\\
+        T:     float: cumulative threshold for filtering background distributions\\
+        m_data: dict: model initialization data (weight, variance and mean/image)\\
+        p_data: dict: foreground patch data (dimension and threshold)
+        
+        Returns nothing.
+        """
         # set model parameters
         self.K = K
         self.alpha = alpha
         self.T = T
-        self.initial_weight = initial_data["weight"]
-        self.initial_variance = initial_data["variance"]
-        self.initial_image = initial_data["image"]
-        self.num_rows, self.num_cols = self.initial_image.shape[:2]
-        if len(self.initial_image.shape) > 2:
-            self.num_channels = self.initial_image.shape[2]
+        self.initial_weight = m_data["weight"]
+        self.initial_variance = m_data["variance"]
+        self.initial_mean = m_data["mean"]
+        self.num_rows, self.num_cols = self.initial_mean.shape[:2]
+        if len(self.initial_mean.shape) > 2:
+            self.num_channels = self.initial_mean.shape[2]
         else:
             self.num_channels = 1
-            self.initial_image = self.initial_image.reshape([self.num_rows, self.num_cols, self.num_channels])
+            self.initial_mean = self.initial_mean.reshape([self.num_rows, self.num_cols, self.num_channels])
+        # set foreground patch data
+        self.patch_dim = p_data["dim"]
+        self.patch_thresh = p_data["thresh"]
         # initialize MOG parameters
-        self.mean = np.zeros((self.num_rows, self.num_cols, self.K, self.num_channels), dtype=np.float32)
-        self.mean[:, :, self.K - 1] = self.initial_image.copy()
-        self.mean_square = np.zeros((self.num_rows, self.num_cols, self.K), dtype=np.float32)
-        self.mean_square[:, :, self.K - 1] = np.linalg.norm(self.initial_image, axis=2) ** 2
         self.weight = np.zeros((self.num_rows, self.num_cols, self.K), dtype=np.float32)
         self.weight[:, :, self.K - 1] = 1
         self.variance = np.full((self.num_rows, self.num_cols, self.K), self.initial_variance, dtype=np.float32)
+        self.mean = np.zeros((self.num_rows, self.num_cols, self.K, self.num_channels), dtype=np.float32)
+        self.mean[:, :, self.K - 1] = self.initial_mean.copy()
 
-    # Trains background subtractor module on given dataset
-    #   dataset:         list: list of images (except first one)
-    #   output_folder: string: path to save images
-    def train(self, dataset, output_folder):
-        for idx, image in enumerate(dataset):
+    def fit(self, gt_images, in_images, out_dir):
+        """Fits background subtractor module (Mixture of Gaussians) on given dataset.
+        
+        Function parameters:\\
+        gt_images: list: list of groundtruth images (except first one)\\
+        in_images: list: list of input images (except first one)\\
+        out_dir: string: directory path to save foreground video\\
+        gt_dir:  string: directory path containing groundtruth images
+        
+        Returns nothing.
+        """
+        mIoU = 0
+        for idx, image in enumerate(in_images):
             if self.num_channels == 1:
                 image = image.reshape([self.num_rows, self.num_cols, self.num_channels])
+            # fit MOG using K-means approximation of EM algorithm (Stauffer and Grimson)
             match_found = np.full((self.num_rows, self.num_cols), False, dtype=bool)
             for k in reversed(range(self.K)):
                 match_locations = np.where(np.logical_and(np.linalg.norm(image - self.mean[:, :, k], axis=-1) < 2.5 * np.sqrt(self.variance[:, :, k]), np.logical_not(match_found)))
@@ -67,35 +81,45 @@ class BackgroundSubtractor:
             weight_copy /= sum_weights
             self.weight[no_match_locations] = weight_copy.copy()
             mean_copy = self.mean[no_match_locations].copy()
-            for k in range(self.num_channels):
-                mean_copy[:, :, k] = np.take_along_axis(mean_copy[:, :, k], sort_weights, axis=-1)
+            for c in range(self.num_channels):
+                mean_copy[:, :, c] = np.take_along_axis(mean_copy[:, :, c], sort_weights, axis=-1)
             mean_copy[:, 0] = image[no_match_locations].copy()
             self.mean[no_match_locations] = mean_copy.copy()
             self.variance[no_match_locations] = np.take_along_axis(self.variance[no_match_locations], sort_weights, axis=-1)
             variance_copy = self.variance[no_match_locations].copy()
             variance_copy[:, 0] = self.initial_variance
             self.variance[no_match_locations] = variance_copy.copy()
+            # find foreground pixels by sorting gaussians w.r.t their weight/sigma ratio (Stauffer and Grimson)
             sort_weights_by_std = np.argsort(self.weight / np.sqrt(self.variance), axis=-1)
             self.weight = np.take_along_axis(self.weight, sort_weights_by_std, axis=-1)
             mean_copy = self.mean.copy()
-            for k in range(self.num_channels):
-                mean_copy[:, :, :, k] = np.take_along_axis(mean_copy[:, :, :, k], sort_weights_by_std, axis=-1)
+            for c in range(self.num_channels):
+                mean_copy[:, :, :, c] = np.take_along_axis(mean_copy[:, :, :, c], sort_weights_by_std, axis=-1)
             self.mean = mean_copy.copy()
             self.variance = np.take_along_axis(self.variance, sort_weights_by_std, axis=-1)
             foreground = self.find_foreground(image)
-            filtered_foreground = self.filter_foreground(foreground)
-            cv2.imwrite(output_folder + "out" + str(0).zfill(6) + ".png", filtered_foreground)
-    
-    # Computes multi-dimensional gaussian pdf (scalar covariance matrix)
-    #   X:        ndarray[B, num_channels]: input vector
-    #   mean:     ndarray[B, num_channels]: mean vector
-    #   variance:              ndarray[B,]: variance along a component
-    def gaussian_pdf(self, X, mean, variance):
-        return np.exp(-0.5 * (np.linalg.norm(X - mean, axis=-1) ** 2) / variance) / ((np.sqrt(2 * np.pi * variance)) ** self.num_channels)
-    
-    # Finds pixels corresponding to foreground
-    #   image:  ndarray[R, C, num_channels]: input image
+            foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh)
+            # save image
+            cv2.imwrite(out_dir + "out" + str(0).zfill(6) + ".png", foreground)
+            cv2.waitKey(30)
+            # calculate mIoU
+            gt_mask = (gt_images[idx][:, :, 0] > 0)
+            out_mask = (foreground > 0)
+            union_mask = np.logical_or(gt_mask, out_mask)
+            intersection_mask = np.logical_and(gt_mask, out_mask)
+            mIoU += intersection_mask.sum() / union_mask.sum()
+        mIoU /= len(gt_images)
+        print("Mean mIoU: ", mIoU)
+
+
     def find_foreground(self, image):
+        """Finds pixels corresponding to foreground.
+
+        Function parameters:\\
+        image: array[R, C, num_channels]: input image
+
+        Returns foreground mask (noisy)
+        """
         foreground = np.zeros((self.num_rows, self.num_cols), dtype=np.uint8)
         match_found = np.full((self.num_rows, self.num_cols), False, dtype=bool) 
         cumulative_sum = np.zeros((self.num_rows, self.num_cols), dtype=np.float32)
@@ -107,21 +131,37 @@ class BackgroundSubtractor:
         foreground[no_match_locations] = 255
         return foreground
     
-    def filter_foreground(self, foreground):
-        numLabels, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, 8, cv2.CV_32S)
-        filtered_foreground = np.zeros((foreground.shape), dtype=np.uint8)
-        for i in range(1, numLabels):
-            w = stats[i, cv2.CC_STAT_WIDTH]
-            h = stats[i, cv2.CC_STAT_HEIGHT]
-            area = stats[i, cv2.CC_STAT_AREA]
-            # if w > 150:
-            #     continue
-            # if area < 900 and (area / (w * h)) < 0.5:
-            #     continue
-            # if area < 200:
-            #     continue
-            filtered_foreground += (labels == i).astype("uint8") * 255
-        return filtered_foreground
+    def clean_foreground(self, foreground, dim, thresh):
+        """Cleans foreground by using integral images and thresholding
+
+        Function parameters:\\
+        foreground: array[R, C]: foreground mask (noisy)\\
+        dim:     pair(int, int): integration patch dimension\\
+        thresh:             int: integration threshold
+
+        Returns cleaned foreground mask (noise-free)
+        """
+        height, width = dim
+        fore_integral = cv2.integral(foreground / 255)
+        patch_rows, patch_cols = self.num_rows - height + 1, self.num_cols - width + 1
+        patch = fore_integral[height:, width:] - fore_integral[height:, :patch_cols] - fore_integral[:patch_rows, width:] + fore_integral[:patch_rows, :patch_cols]     
+        indices = np.argwhere(patch > thresh)
+        cleaned_foreground = np.zeros_like(foreground, dtype=np.uint8)
+        for i in range(indices.shape[0]):
+            cleaned_foreground[indices[i][0]:indices[i][0] + height, indices[i][1]:indices[i][1] + width] = 255
+        return cleaned_foreground
+ 
+    def gaussian_pdf(self, X, mean, variance):
+        """Computes multi-dimensional gaussian pdf (scalar covariance matrix).
+        
+        Function parameters:\\
+        X:        array[B, num_channels]: input array\\
+        mean:     array[B, num_channels]: mean array\\
+        variance:              array[B,]: variance vector
+
+        Returns corresponding multi-dimensional gaussian pdf
+        """
+        return np.exp(-0.5 * (np.linalg.norm(X - mean, axis=-1) ** 2) / variance) / ((np.sqrt(2 * np.pi * variance)) ** self.num_channels)
 
 
         

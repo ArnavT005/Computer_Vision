@@ -1,33 +1,56 @@
 import os
 import cv2
-import sys
+import argparse
 from backgroundSubtractor import BackgroundSubtractor
-import numpy as np
 
-def norm_pdf(x,mean,sigma):
-        return (1/(np.sqrt(2*3.14)*sigma))*(np.exp(-0.5*(((x-mean)/sigma)**2)))
+parser = argparse.ArgumentParser()
+parser.add_argument("--dir", type=str, default="IBMtest2")
+parser.add_argument("--K", type=int, default=3)
+parser.add_argument("--A", type=float, default=0.07)
+parser.add_argument("--T", type=float, default=0.5)
+parser.add_argument("--wt", type=float, default=0.03)
+parser.add_argument("--var", type=float, default=1600)
+parser.add_argument("--side", type=int, default=17)
+parser.add_argument("--height", type=int, default=None)
+parser.add_argument("--width", type=int, default=None)
+parser.add_argument("--thresh", type=int, default=100)
+
+args = parser.parse_args()
+
 
 def main():
-    folder = sys.argv[1]
-    K = int(sys.argv[2])
-    alpha = float(sys.argv[3])
-    T = float(sys.argv[4])
-    initial_weight = float(sys.argv[5])
-    initial_variance = float(sys.argv[6])
-    input_folder = os.getcwd() + "/" + "Dataset/" + folder + "/" + "input/"
-    output_folder = os.getcwd() + "/" + "Dataset/" + folder + "/" + "output/"
-    input_files = [(input_folder + f) for f in os.listdir(input_folder)]
-    input_files.sort()
-    # input_images = [cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY) for file in input_files]
-    input_images = [cv2.imread(file) for file in input_files]
-    initial_image = input_images[0]
+    data_dir = args.dir
+    K = args.K
+    alpha = args.A
+    T = args.T
+    initial_weight = args.wt
+    initial_variance = args.var
+    if args.height and args.width:
+        patch_dim = (args.height, args.width)
+    else:
+        patch_dim = (args.side, args.side)
+    patch_thresh = args.thresh
+    patch_data = {
+        "dim": patch_dim,
+        "thresh": patch_thresh
+    }
+    gt_dir = os.getcwd() + "/" + "Dataset/" + data_dir + "/" + "groundtruth/"
+    in_dir = os.getcwd() + "/" + "Dataset/" + data_dir + "/" + "input/"
+    out_dir = os.getcwd() + "/" + "Dataset/" + data_dir + "/"
+    gt_files = [(gt_dir + f) for f in os.listdir(gt_dir)]
+    gt_files.sort()
+    in_files = [(in_dir + f) for f in os.listdir(in_dir)]
+    in_files.sort()
+    gt_images = [cv2.imread(file) for file in gt_files]
+    in_images = [cv2.imread(file) for file in in_files]
+    initial_mean = in_images[0]
     initial_data = {
         "weight": initial_weight,
         "variance": initial_variance,
-        "image": initial_image
+        "mean": initial_mean
     }
-    model = BackgroundSubtractor(K, alpha, T, initial_data)
-    model.train(input_images[1:], output_folder)
+    model = BackgroundSubtractor(K, alpha, T, initial_data, patch_data)
+    model.fit(gt_images[1:], in_images[1:], out_dir)
 
 
 if __name__ == "__main__":
