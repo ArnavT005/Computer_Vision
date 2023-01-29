@@ -49,6 +49,8 @@ class BackgroundSubtractor:
         Returns nothing.
         """
         mIoU = 0
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v") 
+        video_writer = cv2.VideoWriter(out_dir + "foreground.mp4", fourcc, 15, (self.num_cols, self.num_rows))
         for idx, image in enumerate(in_images):
             if self.num_channels == 1:
                 image = image.reshape([self.num_rows, self.num_cols, self.num_channels])
@@ -100,6 +102,7 @@ class BackgroundSubtractor:
             foreground = self.find_foreground(image)
             foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh)
             # save image
+            # video_writer.write(foreground.reshape((self.num_rows, self.num_cols, 1)).repeat(self.num_channels, axis=-1))
             cv2.imwrite(out_dir + "out" + str(0).zfill(6) + ".png", foreground)
             cv2.waitKey(30)
             # calculate mIoU
@@ -108,6 +111,7 @@ class BackgroundSubtractor:
             union_mask = np.logical_or(gt_mask, out_mask)
             intersection_mask = np.logical_and(gt_mask, out_mask)
             mIoU += intersection_mask.sum() / union_mask.sum()
+        video_writer.release()
         mIoU /= len(gt_images)
         print("Mean mIoU: ", mIoU)
 
