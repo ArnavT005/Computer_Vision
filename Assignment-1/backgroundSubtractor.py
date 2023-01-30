@@ -1,16 +1,18 @@
 import cv2
 import numpy as np
+from skimage.feature import peak_local_max
 
 class BackgroundSubtractor:
-    def __init__(self, K, alpha, T, m_data, p_data):
+    def __init__(self, K, alpha, T, m_data, p_data, non_max):
         """Initializes background subtractor module (Mixture of Gaussians).
         
         Function parameters:\\
-        K:       int: number of gaussians in the mixture\\
-        alpha: float: learning rate\\
-        T:     float: cumulative threshold for filtering background distributions\\
-        m_data: dict: model initialization data (weight, variance and mean/image)\\
-        p_data: dict: foreground patch data (dimension and threshold)
+        K:        int: number of gaussians in the mixture\\
+        alpha:  float: learning rate\\
+        T:      float: cumulative threshold for filtering background distributions\\
+        m_data:  dict: model initialization data (weight, variance and mean/image)\\
+        p_data:  dict: foreground patch data (dimension and threshold)\\
+        non_max: bool: flag for switching on non-maximum suppression (integral images)
         
         Returns nothing.
         """
@@ -27,6 +29,7 @@ class BackgroundSubtractor:
         else:
             self.num_channels = 1
             self.initial_mean = self.initial_mean.reshape([self.num_rows, self.num_cols, self.num_channels])
+        self.non_max = non_max
         # set foreground patch data
         self.patch_dim = p_data["dim"]
         self.patch_thresh = p_data["thresh"]
@@ -49,8 +52,8 @@ class BackgroundSubtractor:
         Returns nothing.
         """
         mIoU = 0
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v") 
-        video_writer = cv2.VideoWriter(out_dir + "foreground.mp4", fourcc, 15, (self.num_cols, self.num_rows))
+        # fourcc = cv2.VideoWriter_fourcc(*"mp4v") 
+        # video_writer = cv2.VideoWriter(out_dir + "foreground.mp4", fourcc, 15, (self.num_cols, self.num_rows))
         for idx, image in enumerate(in_images):
             if self.num_channels == 1:
                 image = image.reshape([self.num_rows, self.num_cols, self.num_channels])
@@ -110,8 +113,11 @@ class BackgroundSubtractor:
             out_mask = (foreground > 0)
             union_mask = np.logical_or(gt_mask, out_mask)
             intersection_mask = np.logical_and(gt_mask, out_mask)
-            mIoU += intersection_mask.sum() / union_mask.sum()
-        video_writer.release()
+            if union_mask.sum() == 0:
+                mIoU += 1
+            else:
+                mIoU += intersection_mask.sum() / union_mask.sum()
+        # video_writer.release()
         mIoU /= len(gt_images)
         print("Mean mIoU: ", mIoU)
 
@@ -148,8 +154,17 @@ class BackgroundSubtractor:
         height, width = dim
         fore_integral = cv2.integral(foreground / 255)
         patch_rows, patch_cols = self.num_rows - height + 1, self.num_cols - width + 1
-        patch = fore_integral[height:, width:] - fore_integral[height:, :patch_cols] - fore_integral[:patch_rows, width:] + fore_integral[:patch_rows, :patch_cols]     
-        indices = np.argwhere(patch > thresh)
+        patch = fore_integral[height:, width:] - fore_integral[height:, :patch_cols] - fore_integral[:patch_rows, width:] + fore_integral[:patch_rows, :patch_cols]
+        thresh_mask = patch > thresh
+        if self.non_max:
+            patch[np.where(np.logical_not(thresh_mask))] = 0
+            max_indices = peak_local_max(patch, min_distance=1)
+            max_mask = np.zeros_like(patch, dtype=bool)
+            max_mask[tuple(max_indices.T)] = True
+            total_mask = np.logical_and(max_mask, thresh_mask)
+            indices = np.argwhere(total_mask)
+        else:
+            indices = np.argwhere(thresh_mask)
         cleaned_foreground = np.zeros_like(foreground, dtype=np.uint8)
         for i in range(indices.shape[0]):
             cleaned_foreground[indices[i][0]:indices[i][0] + height, indices[i][1]:indices[i][1] + width] = 255
