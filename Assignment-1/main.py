@@ -14,6 +14,7 @@ parser.add_argument("--side", type=int, default=17)
 parser.add_argument("--height", type=int, default=None)
 parser.add_argument("--width", type=int, default=None)
 parser.add_argument("--thresh", type=int, default=100)
+parser.add_argument("--filter", default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument("--fill", default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument("--nonmax", default=True, action=argparse.BooleanOptionalAction)
 
@@ -51,7 +52,7 @@ def main():
         "variance": initial_variance,
         "mean": initial_mean
     }
-    model = BackgroundSubtractor(K, alpha, T, initial_data, patch_data, args.fill, args.nonmax)
+    model = BackgroundSubtractor(K, alpha, T, initial_data, patch_data, args.filter, args.fill, args.nonmax)
     model.fit(gt_images[1:], in_images[1:], out_dir)
 
 

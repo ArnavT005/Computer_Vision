@@ -3,7 +3,7 @@ import numpy as np
 from skimage.feature import peak_local_max
 
 class BackgroundSubtractor:
-    def __init__(self, K, alpha, T, m_data, p_data, fill, non_max):
+    def __init__(self, K, alpha, T, m_data, p_data, filter, fill, non_max):
         """Initializes background subtractor module (Mixture of Gaussians).
         
         Function parameters:\\
@@ -12,6 +12,7 @@ class BackgroundSubtractor:
         T:      float: cumulative threshold for filtering background distributions\\
         m_data:  dict: model initialization data (weight, variance and mean/image)\\
         p_data:  dict: foreground patch data (dimension and threshold)\\
+        filter:  bool: flag for switching on filtering of image after prediction\\
         fill:    bool: flag for switching on filling of false negatives (integral images)\\
         non_max: bool: flag for switching on non-maximum suppression (integral images)
         
@@ -30,6 +31,7 @@ class BackgroundSubtractor:
         else:
             self.num_channels = 1
             self.initial_mean = self.initial_mean.reshape([self.num_rows, self.num_cols, self.num_channels])
+        self.filter = filter
         self.fill = fill
         self.non_max = non_max
         # set foreground patch data
@@ -54,8 +56,21 @@ class BackgroundSubtractor:
         Returns nothing.
         """
         mIoU = 0
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v") 
-        video_writer = cv2.VideoWriter(out_dir + "foreground.mp4", fourcc, 15, (self.num_cols, self.num_rows))
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        video_name = "foreground"
+        if self.filter:
+            video_name += "_filter"
+            if self.fill:
+                video_name += "_fill"
+                if self.non_max:
+                    video_name += "_nonmax"
+            else:
+                if self.non_max:
+                    video_name += "_nonmax"
+        else:
+            video_name += "_raw"
+        video_name += ".mp4"
+        video_writer = cv2.VideoWriter(out_dir + video_name, fourcc, 15, (self.num_cols, self.num_rows))
         for idx, image in enumerate(in_images):
             if self.num_channels == 1:
                 image = image.reshape([self.num_rows, self.num_cols, self.num_channels])
@@ -105,8 +120,12 @@ class BackgroundSubtractor:
             self.mean = mean_copy.copy()
             self.variance = np.take_along_axis(self.variance, sort_weights_by_std, axis=-1)
             foreground = self.find_foreground(image)
-            foreground = self.clean_foreground(foreground, (16, 9), 80)
-            foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh)
+            if self.filter:
+                # primary filter (noise removal)
+                foreground = self.clean_foreground(foreground, (15, 9), 70)
+                # secondary filter (detect objects of certain size)
+                foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh)
+            color_foreground = cv2.cvtColor(foreground, cv2.COLOR_GRAY2BGR)
             # calculate mIoU
             gt_mask = (gt_images[idx][:, :, 0] > 0)
             out_mask = (foreground > 0)
@@ -119,7 +138,6 @@ class BackgroundSubtractor:
             mIoU += curr_mIoU
             # generate bounding box around detected objects
             contours, _ = cv2.findContours(foreground, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2:]
-            color_foreground = cv2.cvtColor(foreground, cv2.COLOR_GRAY2BGR)
             for cnt in contours:
                 x, y, w, h = cv2.boundingRect(cnt)
                 if w * h < 400:
