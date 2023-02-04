@@ -6,14 +6,13 @@ from backgroundSubtractor import BackgroundSubtractor
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir", type=str, default="IBMtest2")
 parser.add_argument("--K", type=int, default=3)
-parser.add_argument("--A", type=float, default=0.07)
-parser.add_argument("--T", type=float, default=0.5)
-parser.add_argument("--wt", type=float, default=0.03)
-parser.add_argument("--var", type=float, default=1600)
-parser.add_argument("--side", type=int, default=17)
-parser.add_argument("--height", type=int, default=None)
-parser.add_argument("--width", type=int, default=None)
-parser.add_argument("--thresh", type=int, default=100)
+parser.add_argument("--A", type=float, default=0.03)
+parser.add_argument("--T", type=float, default=0.7)
+parser.add_argument("--wt", type=float, default=0.08)
+parser.add_argument("--var", type=float, default=600)
+parser.add_argument("--height", type=int, default=15)
+parser.add_argument("--width", type=int, default=9)
+parser.add_argument("--thresh", type=int, default=70)
 parser.add_argument("--filter", default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument("--fill", default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument("--nonmax", default=True, action=argparse.BooleanOptionalAction)
@@ -28,10 +27,7 @@ def main():
     T = args.T
     initial_weight = args.wt
     initial_variance = args.var
-    if args.height and args.width:
-        patch_dim = (args.height, args.width)
-    else:
-        patch_dim = (args.side, args.side)
+    patch_dim = (args.height, args.width)
     patch_thresh = args.thresh
     patch_data = {
         "dim": patch_dim,
@@ -58,6 +54,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
