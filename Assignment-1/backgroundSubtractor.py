@@ -122,9 +122,9 @@ class BackgroundSubtractor:
             foreground = self.find_foreground(image)
             if self.filter:
                 # primary filter (noise removal)
-                foreground = self.clean_foreground(foreground, (15, 9), 70)
+                foreground = self.clean_foreground(foreground, (15, 9), 70, False)
                 # secondary filter (detect objects of certain size)
-                foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh)
+                foreground = self.clean_foreground(foreground, self.patch_dim, self.patch_thresh, self.fill)
             color_foreground = cv2.cvtColor(foreground, cv2.COLOR_GRAY2BGR)
             # calculate mIoU
             gt_mask = (gt_images[idx][:, :, 0] > 0)
@@ -173,7 +173,7 @@ class BackgroundSubtractor:
         foreground[no_match_locations] = 255
         return foreground
     
-    def clean_foreground(self, foreground, dim, thresh):
+    def clean_foreground(self, foreground, dim, thresh, fill):
         """Cleans foreground by using integral images and thresholding
 
         Function parameters:\\
@@ -199,7 +199,7 @@ class BackgroundSubtractor:
             indices = np.argwhere(thresh_mask)
         cleaned_foreground = np.zeros_like(foreground, dtype=np.uint8)
         for i in range(indices.shape[0]):
-            if self.fill:
+            if fill:
                 cleaned_foreground[indices[i][0]:indices[i][0] + height, indices[i][1]:indices[i][1] + width] = 255
             else:
                 cleaned_foreground[indices[i][0]:indices[i][0] + height, indices[i][1]:indices[i][1] + width] = foreground[indices[i][0]:indices[i][0] + height, indices[i][1]:indices[i][1] + width]
