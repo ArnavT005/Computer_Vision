@@ -147,7 +147,7 @@ class BackgroundSubtractor:
             font = cv2.FONT_HERSHEY_SIMPLEX
             cv2.putText(color_foreground, 'mIoU: ' + str(round(curr_mIoU, 2)), (0, 13), font, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
             video_writer.write(color_foreground)
-            # cv2.imwrite(out_dir + "out" + str(0).zfill(6) + ".png", color_foreground)
+            # cv2.imwrite(out_dir + "output/" + "out" + str(idx + 1).zfill(6) + ".png", color_foreground)
             # cv2.waitKey(30)  
         video_writer.release()
         mIoU /= len(gt_images)
