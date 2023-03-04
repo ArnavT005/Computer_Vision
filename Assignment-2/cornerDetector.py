@@ -55,4 +55,4 @@ class CornerDetector:
         max_indices = peak_local_max(threshold_harris, min_distance=self.nms_radius)
         max_mask = np.zeros_like(threshold_harris, dtype=bool)
         max_mask[tuple(max_indices.T)] = True
-        return max_mask * 1.0
+        return max_mask
