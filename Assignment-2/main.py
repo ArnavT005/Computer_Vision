@@ -15,6 +15,7 @@ parser.add_argument("--k", type=float, default=0.04)
 parser.add_argument("--thresh", type=float, default=0.01)
 parser.add_argument("--nms_radius", type=int, default=2)
 parser.add_argument("--gaussian", default=True, action=argparse.BooleanOptionalAction)
+parser.add_argument("--binary", default=False, action=argparse.BooleanOptionalAction)
 
 args = parser.parse_args()
 
@@ -29,21 +30,24 @@ def main():
     data_dir = os.getcwd() + "/" + "Dataset/" + args.dir + "/"
     img_files = [(data_dir + "image " + str(i) + ".jpg") for i in range(len(os.listdir(data_dir)))]
     img_list = [cv2.imread(file) for file in img_files]
-    img_left = img_list[0].copy()
-    pts_left = cornerDetector.find(img_left)
-    for i in range(1, len(img_list)):
-        img_right = img_list[i]
-        pts_right = cornerDetector.find(img_right)
-        src, dest = imageStitcher.match((img_right, img_left), (pts_right, pts_left))
-        affine = imageStitcher.getAffineTransform2D(src, dest)
-        result = cv2.warpAffine(img_right, affine, (img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
-        result[0:img_left.shape[0], 0:img_left.shape[1]] = img_left.copy()    
-        zero_idx = np.argwhere(np.all(result[..., :] == 0, axis=0))
-        result = result[:, :zero_idx[0][0]].copy()
-        img_left = result.copy()
+    if not args.binary:
+        img_left = img_list[0].copy()
         pts_left = cornerDetector.find(img_left)
-        print(f"Stitched image {i} to base...")
-    print("Image stitching complete. Saving final image as stitched-" + args.dir + ".jpg")
+        for i in range(1, len(img_list)):
+            img_right = img_list[i]
+            pts_right = cornerDetector.find(img_right)
+            src, dest = imageStitcher.match((img_right, img_left), (pts_right, pts_left))
+            affine = imageStitcher.getAffineTransform2D(src, dest)
+            result = cv2.warpAffine(img_right, affine, (img_right.shape[1] + img_left.shape[1], img_left.shape[0]))
+            result[0:img_left.shape[0], 0:img_left.shape[1]] = img_left.copy()    
+            zero_idx = np.argwhere(np.all(result[..., :] == 0, axis=0))
+            result = result[:, :zero_idx[0][0]].copy()
+            img_left = result.copy()
+            pts_left = cornerDetector.find(img_left)
+            print(f"Stitched image {i} to base...")
+        print("Image stitching complete. Saving final image as stitched-" + args.dir + ".jpg")
+    else:
+        pass
     cv2.imwrite("stitched-" + args.dir + ".jpg", img_left)
 
 
