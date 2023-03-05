@@ -3,13 +3,13 @@ import numpy as np
 from skimage.feature import peak_local_max
 
 class CornerDetector:
-    def __init__(self, window, kappa, threshold, nms_radius):
+    def __init__(self, window, kappa, top_k, nms_radius):
         """Initializes corner detector module (Harris).
         
         Function parameters:\\
         window:     dict: window parameters (type and size (square))\\
         kappa:     float: Harris response parameter\\
-        threshold: float: Harris response threshold fraction\\
+        top_k:       int: Harris response threshold count (top k)\\
         nms_radius:  int: Non-Maximum Suppression radius
         
         Returns nothing.
@@ -17,7 +17,7 @@ class CornerDetector:
         self.window_type = window["type"]
         self.window_size = window["size"]
         self.kappa = kappa
-        self.threshold = threshold
+        self.top_k = top_k
         self.nms_radius = nms_radius
     
     def find(self, img):
@@ -49,7 +49,7 @@ class CornerDetector:
         trace_harris = w_img_del_x_del_x + w_img_del_y_del_y
         # Harris and Stephens (1988)
         response_harris = det_harris - self.kappa * (trace_harris ** 2)
-        threshold_mask = (response_harris > self.threshold * response_harris.max())
+        threshold_mask = np.where(np.unique(-response_harris, return_inverse=True)[1] < self.top_k, 1, 0).reshape(response_harris.shape)
         threshold_harris = threshold_mask * response_harris
         # Non-Maximum Suppression
         max_indices = peak_local_max(threshold_harris, min_distance=self.nms_radius)
