@@ -1,21 +1,24 @@
 import cv2
+import random
 import numpy as np
-from random import sample
 
 class ImageStitcher:
-    def __init__(self, proximity_radius, neighbourhood_radius, sample_count):
+    def __init__(self, proximity_radius, neighbourhood_radius, sample_count, seed):
         """Initializes image stitcher module.
         
         Function parameters:\\
         proximity_radius:     int: proximity radius used for matching only nearby points\\
         neighbourhood_radius: int: neighbourhood radius used for SSD calculation during matching\\
-        sample_count:         int: number of interest points that are matched between two images
+        sample_count:         int: number of interest points that are matched between two images\\
+        seed:                 int: random number generator seed (used in sampling)
         
         Returns nothing.
         """
         self.proximity_radius = proximity_radius
         self.neighbourhood_radius = neighbourhood_radius
         self.sample_count = sample_count
+        self.seed = seed
+        random.seed(self.seed)
 
     def match(self, img, mask):
         """Matches interest points of image A with interest points of image B.
@@ -29,7 +32,7 @@ class ImageStitcher:
         img_A, img_B = img
         mask_A, mask_B = mask[0].copy(), mask[1].copy()
         match_A, match_B = [], []
-        points_A = sample(tuple(np.transpose(np.where(mask_A))), self.sample_count)
+        points_A = random.sample(tuple(np.transpose(np.where(mask_A))), self.sample_count)
         p, n = self.proximity_radius, self.neighbourhood_radius
         for point_A in points_A:
             proximity_mask = np.zeros_like(mask_B, dtype=bool)
