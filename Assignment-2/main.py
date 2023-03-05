@@ -69,7 +69,7 @@ def main():
             img_list = temp_img_list
         img_left = img_list[0]
     print("Image stitching complete. Saving final image as stitched-" + args.dir + ".jpg")
-    cv2.imwrite("stitched1-" + args.dir + ".jpg", img_left)
+    cv2.imwrite("stitched-" + args.dir + ".jpg", img_left)
 
 
 if __name__ == "__main__":
