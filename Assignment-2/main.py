@@ -7,11 +7,12 @@ from cornerDetector import CornerDetector
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir", type=str, default="1")
-parser.add_argument("--p_radius", type=int, default=1000)
+parser.add_argument("--p_radius", type=int, default=300)
 parser.add_argument("--n_radius", type=int, default=2)
 parser.add_argument("--sample_count", type=int, default=100)
 parser.add_argument("--window_size", type=int, default=5)
 parser.add_argument("--k", type=float, default=0.04)
+parser.add_argument("--thresh", type=float, default=0.01)
 parser.add_argument("--top_k", type=int, default=3000)
 parser.add_argument("--nms_radius", type=int, default=2)
 parser.add_argument("--seed", type=int, default=1)
@@ -27,7 +28,7 @@ def main():
         "type": "gaussian" if args.gaussian else "box",
         "size": args.window_size
     }
-    cornerDetector = CornerDetector(window, args.k, args.top_k, args.nms_radius)
+    cornerDetector = CornerDetector(window, args.k, args.thresh, args.top_k, args.nms_radius)
     data_dir = os.getcwd() + "/" + "Dataset/" + args.dir + "/"
     img_files = [(data_dir + "image " + str(i) + ".jpg") for i in range(len(os.listdir(data_dir)))]
     img_list = [cv2.imread(file) for file in img_files]
