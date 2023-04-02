@@ -129,10 +129,103 @@ def getRotationAndTranslation(K_inv):
     r3 = np.cross(r1, r2)
     r3 /= np.linalg.norm(r3)
     R = np.concatenate((r1.reshape((3, 1)), r2.reshape((3, 1)), r3.reshape((3, 1))), axis=-1)
-    if np.linalg.det(R) < 0:
+    if np.linalg.det(R) > 0:
         R = np.concatenate((r1.reshape((3, 1)), r2.reshape((3, 1)), -r3.reshape((3, 1))), axis=-1)
     return R, t.reshape((3, 1))
 
+def getCubeMesh():
+    squareSide = 3.175
+    vertices = [
+        np.array([2 * squareSide, 2 * squareSide, 0, 1.0]).reshape((4, 1)),
+        np.array([6 * squareSide, 2 * squareSide, 0, 1.0]).reshape((4, 1)),
+        np.array([6 * squareSide, 6 * squareSide, 0, 1.0]).reshape((4, 1)),
+        np.array([2 * squareSide, 6 * squareSide, 0, 1.0]).reshape((4, 1)),
+        np.array([2 * squareSide, 2 * squareSide, 4 * squareSide, 1.0]).reshape((4, 1)),
+        np.array([6 * squareSide, 2 * squareSide, 4 * squareSide, 1.0]).reshape((4, 1)),
+        np.array([6 * squareSide, 6 * squareSide, 4 * squareSide, 1.0]).reshape((4, 1)),
+        np.array([2 * squareSide, 6 * squareSide, 4 * squareSide, 1.0]).reshape((4, 1))
+    ]
+    triangles = [
+        [0, 3, 2],
+        [0, 2, 1],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
+        [4, 5, 6],
+        [4, 6, 7]
+    ]
+    faceNormals = [
+        np.array([0, 0, -1]).reshape((3, 1)),
+        np.array([0, 0, -1]).reshape((3, 1)),
+        np.array([0, -1, 0]).reshape((3, 1)),
+        np.array([0, -1, 0]).reshape((3, 1)),
+        np.array([1, 0, 0]).reshape((3, 1)),
+        np.array([1, 0, 0]).reshape((3, 1)),
+        np.array([0, 1, 0]).reshape((3, 1)),
+        np.array([0, 1, 0]).reshape((3, 1)),
+        np.array([-1, 0, 0]).reshape((3, 1)),
+        np.array([-1, 0, 0]).reshape((3, 1)),
+        np.array([0, 0, 1]).reshape((3, 1)),
+        np.array([0, 0, 1]).reshape((3, 1))
+    ]
+    return vertices, triangles, faceNormals
+
+def crossProduct2D(a, b):
+    return a[0] * b[1] - a[1] * b[0]
+
+def orientCounterClockwise(pos):
+    ab = pos[1] - pos[0]
+    ac = pos[2] - pos[0]
+    if crossProduct2D(ab, ac) < 0:
+        return [0, 2, 1]
+    else:
+        return [0, 1, 2]
+
+def inTriangle(x, y, pos):
+    point = np.array([x, y]).reshape((2, 1))
+    ap, ab = point - pos[0], pos[1] - pos[0]
+    bp, bc = point - pos[1], pos[2] - pos[1]
+    cp, ca = point - pos[2], pos[0] - pos[2]
+    if crossProduct2D(ab, ap) < 0 or crossProduct2D(bc, bp) < 0 or crossProduct2D(ca, cp) < 0:
+        return False
+    return True
+
+def distance(point, pos):
+    return np.abs(point[0] * (pos[0][1] - pos[1][1]) + point[1] * (pos[1][0] - pos[0][0]) + pos[0][0] * pos[1][1] - pos[0][1] * pos[1][0])
+
+def phi(index, point, pos):
+    sidePos = []
+    for i in range(3):
+        if i != index:
+            sidePos.append(pos[i])
+    return distance(point, sidePos) / distance(pos[index], sidePos)
+
+def rasterize(posWorld, pos, depth, normal, depthBuffer, img, lightSource, ka, kd):
+    minX, maxX = int(min([pos[0][0], pos[1][0], pos[2][0]])), int(max([pos[0][0], pos[1][0], pos[2][0]]) + 1)
+    minY, maxY = int(min([pos[0][1], pos[1][1], pos[2][1]])), int(max([pos[0][1], pos[1][1], pos[2][1]]) + 1)
+    order = orientCounterClockwise(pos)
+    posWorld = [posWorld[i] for i in order]
+    pos = [pos[i] for i in order]
+    depth = [depth[i] for i in order]
+    count = 0
+    for i in range(minX, maxX):
+        for j in range(minY, maxY):
+            if inTriangle(i, j, pos):
+                count += 1
+                weights = [phi(0, (i, j), pos), phi(1, (i, j), pos), phi(2, (i, j), pos)]
+                depth_ = 1.0 / (weights[0] / depth[0] + weights[1] / depth[1] + weights[2] / depth[2])
+                if depth_ >= depthBuffer[imgShape[0] - 1 - j][i]:
+                    continue
+                posWorld_ = (weights[0] * posWorld[0] / depth[0] + weights[1] * posWorld[1] / depth[1] + weights[2] * posWorld[2] / depth[2]) * depth_
+                lightVector_ = (lightSource - posWorld_) / np.linalg.norm(lightSource - posWorld_)
+                depthBuffer[imgShape[0] - 1 - j][i] = depth_
+                img[imgShape[0] - 1 - j][i] = 255 * (ka + kd * max(0, np.dot(lightVector_, normal))) * np.array([1, 1, 1])
+    
 def main():
     global img, imgPoints, imgShape, imgNum
     horizontalVanishingPoints, verticalVanishingPoints = [], []
@@ -168,6 +261,7 @@ def main():
             pickle.dump(K, fp)
     for i in range(4):
         img = cv2.imread(f"Dataset/TableTop/tabletop_{i}.jpg")
+        imgCopy = img.copy()
         imgPoints = []
         imgShape = img.shape
         imgNum = i
@@ -181,6 +275,23 @@ def main():
             with open(f"CameraModel/extrinsic_{i}.pkl", "wb") as fp:
                 pickle.dump(np.concatenate((R, t), axis=-1), fp)
             P = K @ np.concatenate((R, t), axis=-1)
+        verticesWorld, triangles, faceNormals = getCubeMesh()
+        verticesCamera = [np.linalg.inv(K) @ P @ vertex for vertex in verticesWorld]
+        verticesDepth = [vertex[2, 0] for vertex in verticesCamera]
+        verticesImage = [P @ vertex for vertex in verticesWorld]
+        verticesImage = [vertex[:2, :] / vertex[2, 0] for vertex in verticesImage]
+        depthBuffer = np.inf * np.ones(imgShape[:2])
+        lightSource = np.array([-100, -100, 500])
+        ka = np.array([0, 0, 0.1])
+        kd = np.array([0, 0, 0.9])
+        for index, (triangle, normal) in enumerate(zip(triangles, faceNormals)):
+            i0, i1, i2 = triangle
+            posWorld = [verticesWorld[i0][:3, 0], verticesWorld[i1][:3, 0], verticesWorld[i2][:3, 0]]
+            pos = [verticesImage[i0], verticesImage[i1], verticesImage[i2]]
+            depth = [verticesDepth[i0], verticesDepth[i1], verticesDepth[i2]]
+            rasterize(posWorld, pos, depth, normal, depthBuffer, imgCopy, lightSource, ka, kd)
+            print(f"Rasterized triangle {index}...")
+        cv2.imwrite(f"AR_{i}.jpg", imgCopy)
 
 if __name__ == "__main__":
     main()
