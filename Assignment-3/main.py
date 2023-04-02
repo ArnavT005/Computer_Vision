@@ -4,8 +4,9 @@ import argparse
 import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--load", default=False, action=argparse.BooleanOptionalAction)
+parser.add_argument("--load_K", default=False, action=argparse.BooleanOptionalAction)
 parser.add_argument("--debug", default=False, action=argparse.BooleanOptionalAction)
+parser.add_argument("--load_RT", default=False, action=argparse.BooleanOptionalAction)
 
 args = parser.parse_args()
 
@@ -56,7 +57,7 @@ def getOrthogonalDirections():
         if cv2.waitKey(20) & 0xFF == 27:
             break
     cv2.destroyWindow("Chessboard")
-    cv2.imwrite(f"Dataset/Calibration/calibration_{imgNum}.jpg", img)
+    cv2.imwrite(f"Dataset/Calibration/Chessboard/calibration_{imgNum}.jpg", img)
     horizontalImgPoints, verticalImgPoints = [np.array([[0.0], [1.0]])], [np.array([[0.0], [1.0]])]
     previousDistance = 0.0
     for i in range(1, 6):
@@ -106,10 +107,36 @@ def getCameraIntrinsicMatrix(horizontalVanishingPoints, verticalVanishingPoints)
     K /= K[2, 2]
     return K
 
+def getRotationAndTranslation(K_inv):
+    global img, imgPoints, imgNum
+    squareSide = 3.175
+    realPoints = []
+    for i in range(5):
+        for j in range(5):
+            realPoints.append(np.array([[(i + 2) * squareSide], [(j + 2) * squareSide], [1.0]]))
+    cv2.namedWindow("TableTop")
+    cv2.setMouseCallback("TableTop", onMouseClick)
+    while True:
+        cv2.imshow("TableTop", img)
+        if cv2.waitKey(20) & 0xFF == 27:
+            break
+    cv2.destroyWindow("TableTop")
+    cv2.imwrite(f"Dataset/Calibration/TableTop/calibration_{imgNum}.jpg", img)
+    imgPoints = [K_inv @ np.append(imgPoint, 1.0).reshape((3, 1)) for imgPoint in imgPoints]
+    partialMatrix, _ = cv2.findHomography(np.array(realPoints), np.array(imgPoints))
+    partialMatrix /= np.linalg.norm(partialMatrix[:, 0])
+    r1, r2, t = partialMatrix[:, 0], partialMatrix[:, 1], partialMatrix[:, 2]
+    r3 = np.cross(r1, r2)
+    r3 /= np.linalg.norm(r3)
+    R = np.concatenate((r1.reshape((3, 1)), r2.reshape((3, 1)), r3.reshape((3, 1))), axis=-1)
+    if np.linalg.det(R) < 0:
+        R = np.concatenate((r1.reshape((3, 1)), r2.reshape((3, 1)), -r3.reshape((3, 1))), axis=-1)
+    return R, t.reshape((3, 1))
+
 def main():
     global img, imgPoints, imgShape, imgNum
     horizontalVanishingPoints, verticalVanishingPoints = [], []
-    if args.load:
+    if args.load_K:
         with open("CameraModel/intrinsic.pkl", "rb") as fp:
             K = pickle.load(fp)
     elif args.debug:
@@ -139,7 +166,21 @@ def main():
         K = getCameraIntrinsicMatrix(horizontalVanishingPoints, verticalVanishingPoints)
         with open("CameraModel/intrinsic.pkl", "wb") as fp:
             pickle.dump(K, fp)
-    breakpoint()
+    for i in range(4):
+        img = cv2.imread(f"Dataset/TableTop/tabletop_{i}.jpg")
+        imgPoints = []
+        imgShape = img.shape
+        imgNum = i
+        if args.load_RT:
+            with open(f"CameraModel/extrinsic_{i}.pkl", "rb") as fp:
+                P = K @ pickle.load(fp)
+        else:
+            print(f"Choose calibration points in image: {i} ...")
+            R, t = getRotationAndTranslation(np.linalg.inv(K))
+            print(f"Rotation and translation computation: SUCCESS")
+            with open(f"CameraModel/extrinsic_{i}.pkl", "wb") as fp:
+                pickle.dump(np.concatenate((R, t), axis=-1), fp)
+            P = K @ np.concatenate((R, t), axis=-1)
 
 if __name__ == "__main__":
     main()
