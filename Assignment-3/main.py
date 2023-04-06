@@ -205,7 +205,7 @@ def phi(index, point, pos):
             sidePos.append(pos[i])
     return distance(point, sidePos) / distance(pos[index], sidePos)
 
-def rasterize(posWorld, pos, depth, normal, depthBuffer, img, lightSource, ka, kd):
+def rasterize(posWorld, pos, depth, normal, depthBuffer, img, lightSources, ka, kd):
     minX, maxX = int(min([pos[0][0], pos[1][0], pos[2][0]])), int(max([pos[0][0], pos[1][0], pos[2][0]]) + 1)
     minY, maxY = int(min([pos[0][1], pos[1][1], pos[2][1]])), int(max([pos[0][1], pos[1][1], pos[2][1]]) + 1)
     order = orientCounterClockwise(pos)
@@ -222,9 +222,12 @@ def rasterize(posWorld, pos, depth, normal, depthBuffer, img, lightSource, ka, k
                 if depth_ >= depthBuffer[imgShape[0] - 1 - j][i]:
                     continue
                 posWorld_ = (weights[0] * posWorld[0] / depth[0] + weights[1] * posWorld[1] / depth[1] + weights[2] * posWorld[2] / depth[2]) * depth_
-                lightVector_ = (lightSource - posWorld_) / np.linalg.norm(lightSource - posWorld_)
+                diffuseColor = 0
+                for lightSource in lightSources:
+                    lightVector_ = (lightSource - posWorld_) / np.linalg.norm(lightSource - posWorld_)
+                    diffuseColor += kd * max(0, np.dot(lightVector_, normal))
                 depthBuffer[imgShape[0] - 1 - j][i] = depth_
-                img[imgShape[0] - 1 - j][i] = 255 * (ka + kd * max(0, np.dot(lightVector_, normal))) * np.array([1, 1, 1])
+                img[imgShape[0] - 1 - j][i] = 255 * (ka + diffuseColor / len(lightSources)) * np.array([1, 1, 1])
     
 def main():
     global img, imgPoints, imgShape, imgNum
@@ -281,17 +284,18 @@ def main():
         verticesImage = [P @ vertex for vertex in verticesWorld]
         verticesImage = [vertex[:2, :] / vertex[2, 0] for vertex in verticesImage]
         depthBuffer = np.inf * np.ones(imgShape[:2])
-        lightSource = np.array([-100, -100, 500])
-        ka = np.array([0, 0, 0.1])
-        kd = np.array([0, 0, 0.9])
+        lightSources = [np.array([-100, -100, 250]), np.array([100, 50, 0])]
+        ka = np.array([0, 0, 0.4])
+        kd = np.array([0, 0, 0.6])
         for index, (triangle, normal) in enumerate(zip(triangles, faceNormals)):
             i0, i1, i2 = triangle
             posWorld = [verticesWorld[i0][:3, 0], verticesWorld[i1][:3, 0], verticesWorld[i2][:3, 0]]
             pos = [verticesImage[i0], verticesImage[i1], verticesImage[i2]]
             depth = [verticesDepth[i0], verticesDepth[i1], verticesDepth[i2]]
-            rasterize(posWorld, pos, depth, normal, depthBuffer, imgCopy, lightSource, ka, kd)
+            rasterize(posWorld, pos, depth, normal, depthBuffer, imgCopy, lightSources, ka, kd)
             print(f"Rasterized triangle {index}...")
-        cv2.imwrite(f"AR_{i}.jpg", imgCopy)
+        cv2.imwrite(f"Dataset/Output/AR_{i}.jpg", imgCopy)
+        print(f"Image augmentation complete for scene {i}\n")
 
 if __name__ == "__main__":
     main()
