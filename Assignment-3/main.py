@@ -5,7 +5,6 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--load_K", default=False, action=argparse.BooleanOptionalAction)
-parser.add_argument("--debug", default=False, action=argparse.BooleanOptionalAction)
 parser.add_argument("--load_RT", default=False, action=argparse.BooleanOptionalAction)
 parser.add_argument("--augment", default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument("--pyramid", default=False, action=argparse.BooleanOptionalAction)
@@ -24,15 +23,6 @@ def main():
     if args.load_K:
         with open("CameraModel/intrinsic.pkl", "rb") as fp:
             K = pickle.load(fp)
-    elif args.debug:
-        with open("CameraModel/horizontal.pkl", "rb") as fp:
-            horizontalVanishingPoints = pickle.load(fp)
-        with open("CameraModel/vertical.pkl", "rb") as fp:
-            verticalVanishingPoints = pickle.load(fp)
-        breakpoint()
-        K = calibration.getCameraIntrinsicMatrix(horizontalVanishingPoints, verticalVanishingPoints)
-        with open("CameraModel/intrinsic.pkl", "wb") as fp:
-            pickle.dump(K, fp)
     else:
         for i in range(20):
             globals.img = cv2.imread(f"Dataset/Chessboard/chessboard_{i}.jpg")
