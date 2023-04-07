@@ -30,7 +30,7 @@ def getOrthogonalDirections():
     imgPoints = globals.imgPoints
     realPoints = []
     for i in range(6):
-        realPoints.append(np.array([[globals.SQUARE * i], [1.0]]))
+        realPoints.append(np.array([[globals.SQUARE_SIDE * i], [1.0]]))
     cv2.namedWindow("Chessboard")
     cv2.setMouseCallback("Chessboard", globals.onMouseClick)
     while True:
@@ -94,7 +94,7 @@ def getRotationAndTranslation(K_inv):
     realPoints = []
     for i in range(5):
         for j in range(5):
-            realPoints.append(np.array([[(i + 2) * globals.SQUARE], [(j + 2) * globals.SQUARE], [1.0]]))
+            realPoints.append(np.array([[(i + 2) * globals.SQUARE_SIDE], [(j + 2) * globals.SQUARE_SIDE], [1.0]]))
     cv2.namedWindow("TableTop")
     cv2.setMouseCallback("TableTop", globals.onMouseClick)
     while True:
